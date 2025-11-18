@@ -5,6 +5,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import aiRouter from "./routes/ai.js";
+import lessonsRouter from "./routes/wizzyLessons.js";
 
 const app = express();
 
@@ -99,6 +100,7 @@ app.get("/api/health", (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // 🧠 Rotte Wizzy (chat, quiz, lezioni)
 app.use("/api/ai", aiRouter);
+app.use("/api/ai", lessonsRouter);
 
 // 🚀 Server in ascolto su rete locale
 const PORT = process.env.PORT || 5050;
@@ -107,6 +109,7 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`📘 Rotte disponibili:
   - /api/ai/ask
   - /api/ai/generate-quiz
+  - /api/ai/genera-lezione
   - /api/ai/lezioni/:materia/:numero
   - /api/health
   `);

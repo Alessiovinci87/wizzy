@@ -9,6 +9,38 @@ import lessonsRouter from "./routes/wizzyLessons.js";
 
 const app = express();
 
+const listRoutes = () => {
+  const stack = app?._router?.stack;
+  if (!stack) {
+    console.warn("⚠️ Rotte non ancora disponibili");
+    return [];
+  }
+
+  const routes = [];
+
+  const walk = (layers, prefix = "") => {
+    layers.forEach((layer) => {
+      if (layer.route) {
+        const methods = Object.keys(layer.route.methods)
+          .map((m) => m.toUpperCase())
+          .join(", ");
+        routes.push(`${methods} ${prefix}${layer.route.path}`);
+      } else if (layer.name === "router" && layer.handle?.stack) {
+        const nested = layer.regexp?.fast_star ? "" : layer.regexp?.source || "";
+        const cleaned = nested
+          .replace("^\\/", "/")
+          .replace("\\/?(?=\\/|$)", "")
+          .replace("^", "")
+          .replace("$", "");
+        walk(layer.handle.stack, `${prefix}${cleaned}`);
+      }
+    });
+  };
+
+  walk(stack);
+  return routes;
+};
+
 // 🌐 CORS helper per Expo / reti locali
 const EXPO_PORTS = ["19000", "19006", "8081"];
 
@@ -106,11 +138,10 @@ app.use("/api/ai", lessonsRouter);
 const PORT = process.env.PORT || 5050;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🪄 Wizzy backend running on http://192.168.1.14:${PORT}`);
-  console.log(`📘 Rotte disponibili:
-  - /api/ai/ask
-  - /api/ai/generate-quiz
-  - /api/ai/genera-lezione
-  - /api/ai/lezioni/:materia/:numero
-  - /api/health
-  `);
+
+  const routes = listRoutes();
+  if (routes.length) {
+    console.log("📘 Rotte disponibili:");
+    routes.forEach((r) => console.log(`  - ${r}`));
+  }
 });

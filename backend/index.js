@@ -11,11 +11,7 @@ const app = express();
 
 const listRoutes = () => {
   const stack = app?._router?.stack;
-  if (!stack) {
-    console.warn("⚠️ Rotte non ancora disponibili");
-    return [];
-  }
-
+  if (!stack) return [];
   const routes = [];
 
   const walk = (layers, prefix = "") => {
@@ -39,6 +35,21 @@ const listRoutes = () => {
 
   walk(stack);
   return routes;
+};
+const logRoutes = (attempt = 0) => {
+  const routes = listRoutes();
+
+  if (!routes.length) {
+    if (attempt < 5) {
+      setTimeout(() => logRoutes(attempt + 1), 200);
+    } else {
+      console.warn("⚠️ Nessuna rotta registrata (controlla la configurazione)");
+    }
+    return;
+  }
+
+  console.log("📘 Rotte disponibili:");
+  routes.forEach((r) => console.log(`  - ${r}`));
 };
 
 // 🌐 CORS helper per Expo / reti locali
@@ -138,10 +149,5 @@ app.use("/api/ai", lessonsRouter);
 const PORT = process.env.PORT || 5050;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🪄 Wizzy backend running on http://192.168.1.14:${PORT}`);
-
-  const routes = listRoutes();
-  if (routes.length) {
-    console.log("📘 Rotte disponibili:");
-    routes.forEach((r) => console.log(`  - ${r}`));
-  }
+  logRoutes();
 });

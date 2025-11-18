@@ -12,6 +12,7 @@ import LivelliScreen from "./screens/LivelliScreen";
 import QuizScreen from "./screens/QuizScreen";
 import ChatWizzyScreen from "./screens/ChatWizzyScreen";
 import MappaRegno from "./screens/MappaRegno";
+import { fetchLesson } from "./src/api/client";
 
 LogBox.ignoreLogs(["The action 'REPLACE'"]);
 
@@ -29,18 +30,27 @@ function LezioneScreen() {
   const current = lezione[index];
 
   useEffect(() => {
+    let isMounted = true;
+    const controller = new AbortController();
+
     const loadLesson = async () => {
       try {
-        const res = await fetch("http://192.168.1.14:5050/api/ai/lezioni/inglese/1");
-        const data = await res.json();
-        if (data.lezione) setLezione(data.lezione);
+        const data = await fetchLesson("inglese", 1, controller.signal);
+        if (isMounted && data?.lezione) setLezione(data.lezione);
       } catch (err) {
+        if (err.name === "AbortError") return;
         console.error("❌ Errore caricamento lezione:", err);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     };
+
     loadLesson();
+
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
   }, []);
 
   if (loading)

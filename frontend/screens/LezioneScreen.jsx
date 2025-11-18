@@ -7,6 +7,7 @@ import {
     ActivityIndicator,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { fetchLesson } from "../src/api/client";
 
 export default function LezioneScreen({ route, navigation }) {
     const { materia, numero, titolo } = route.params;
@@ -19,19 +20,28 @@ export default function LezioneScreen({ route, navigation }) {
     const current = lezione[index];
 
     useEffect(() => {
+        let isMounted = true;
+        const controller = new AbortController();
+
         const loadLesson = async () => {
             try {
-                const res = await fetch(`http://192.168.1.14:5050/api/ai/lezioni/${materia}/${numero}`);
-                const data = await res.json();
-                if (data.lezione) setLezione(data.lezione);
+                const data = await fetchLesson(materia, numero, controller.signal);
+                if (isMounted && data?.lezione) setLezione(data.lezione);
             } catch (err) {
+                if (err.name === "AbortError") return;
                 console.error("❌ Errore caricamento lezione:", err);
             } finally {
-                setLoading(false);
+                if (isMounted) setLoading(false);
             }
         };
+
         loadLesson();
-    }, []);
+
+        return () => {
+            isMounted = false;
+            controller.abort();
+        };
+    }, [materia, numero]);
 
     const handleSelect = (opt) => {
         if (opt === current.answer) {

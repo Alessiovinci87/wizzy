@@ -8,8 +8,63 @@ import aiRouter from "./routes/ai.js";
 
 const app = express();
 
-// 🌐 CORS (aperto per sviluppo locale con Expo)
-const ORIGIN = process.env.ALLOWED_ORIGIN || "*";
+// 🌐 CORS helper per Expo / reti locali
+const EXPO_PORTS = ["19000", "19006", "8081"];
+
+const parseList = (value = "") =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const envOrigins = new Set(parseList(process.env.ALLOWED_ORIGINS));
+const allowedOrigins = new Set([
+  ...envOrigins,
+  ...EXPO_PORTS.flatMap((port) => [
+    `http://localhost:${port}`,
+    `http://127.0.0.1:${port}`,
+  ]),
+]);
+
+const allowedPorts = new Set([
+  ...EXPO_PORTS,
+  ...parseList(process.env.ALLOWED_PORTS),
+]);
+
+const isPrivateHost = (hostname = "") => {
+  if (!hostname) return false;
+  if (["localhost", "127.0.0.1"].includes(hostname)) return true;
+  if (hostname.startsWith("10.")) return true;
+  if (hostname.startsWith("192.168.")) return true;
+
+  if (hostname.startsWith("172.")) {
+    const secondOctet = Number(hostname.split(".")[1]);
+    if (secondOctet >= 16 && secondOctet <= 31) return true;
+  }
+
+  return false;
+};
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true; // richieste server-to-server o strumenti come Thunder Client
+  if (allowedOrigins.has(origin)) return true;
+
+  try {
+    const parsed = new URL(origin);
+    const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+
+    if (["http:", "https:"].includes(parsed.protocol) && isPrivateHost(parsed.hostname)) {
+      if (allowedPorts.size === 0 || allowedPorts.has(port)) {
+        allowedOrigins.add(origin); // cache dinamica
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn("⚠️ CORS origin parsing error:", err.message);
+  }
+
+  return false;
+};
 
 app.use(
   helmet({
@@ -19,9 +74,17 @@ app.use(
 
 app.use(
   cors({
-    origin: ORIGIN,
-    methods: ["GET", "POST"],
-    credentials: false,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn("❌ Origine CORS non autorizzata:", origin);
+      return callback(new Error("CORS non autorizzato"));
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   })
 );
 

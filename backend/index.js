@@ -5,11 +5,110 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import aiRouter from "./routes/ai.js";
+import lessonsRouter from "./routes/wizzyLessons.js";
 
 const app = express();
 
-// 🌐 CORS (aperto per sviluppo locale con Expo)
-const ORIGIN = process.env.ALLOWED_ORIGIN || "*";
+const listRoutes = () => {
+  const stack = app?._router?.stack;
+  if (!stack) return [];
+  const routes = [];
+
+  const walk = (layers, prefix = "") => {
+    layers.forEach((layer) => {
+      if (layer.route) {
+        const methods = Object.keys(layer.route.methods)
+          .map((m) => m.toUpperCase())
+          .join(", ");
+        routes.push(`${methods} ${prefix}${layer.route.path}`);
+      } else if (layer.name === "router" && layer.handle?.stack) {
+        const nested = layer.regexp?.fast_star ? "" : layer.regexp?.source || "";
+        const cleaned = nested
+          .replace("^\\/", "/")
+          .replace("\\/?(?=\\/|$)", "")
+          .replace("^", "")
+          .replace("$", "");
+        walk(layer.handle.stack, `${prefix}${cleaned}`);
+      }
+    });
+  };
+
+  walk(stack);
+  return routes;
+};
+const logRoutes = (attempt = 0) => {
+  const routes = listRoutes();
+
+  if (!routes.length) {
+    if (attempt < 5) {
+      setTimeout(() => logRoutes(attempt + 1), 200);
+    } else {
+      console.warn("⚠️ Nessuna rotta registrata (controlla la configurazione)");
+    }
+    return;
+  }
+
+  console.log("📘 Rotte disponibili:");
+  routes.forEach((r) => console.log(`  - ${r}`));
+};
+
+// 🌐 CORS helper per Expo / reti locali
+const EXPO_PORTS = ["19000", "19006", "8081"];
+
+const parseList = (value = "") =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const envOrigins = new Set(parseList(process.env.ALLOWED_ORIGINS));
+const allowedOrigins = new Set([
+  ...envOrigins,
+  ...EXPO_PORTS.flatMap((port) => [
+    `http://localhost:${port}`,
+    `http://127.0.0.1:${port}`,
+  ]),
+]);
+
+const allowedPorts = new Set([
+  ...EXPO_PORTS,
+  ...parseList(process.env.ALLOWED_PORTS),
+]);
+
+const isPrivateHost = (hostname = "") => {
+  if (!hostname) return false;
+  if (["localhost", "127.0.0.1"].includes(hostname)) return true;
+  if (hostname.startsWith("10.")) return true;
+  if (hostname.startsWith("192.168.")) return true;
+
+  if (hostname.startsWith("172.")) {
+    const secondOctet = Number(hostname.split(".")[1]);
+    if (secondOctet >= 16 && secondOctet <= 31) return true;
+  }
+
+  return false;
+};
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true; // richieste server-to-server o strumenti come Thunder Client
+  if (allowedOrigins.has(origin)) return true;
+
+  try {
+    const parsed = new URL(origin);
+    const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+
+    if (["http:", "https:"].includes(parsed.protocol) && isPrivateHost(parsed.hostname)) {
+      if (allowedPorts.size === 0 || allowedPorts.has(port)) {
+        allowedOrigins.add(origin); // cache dinamica
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn("⚠️ CORS origin parsing error:", err.message);
+  }
+
+  return false;
+};
 
 app.use(
   helmet({
@@ -19,9 +118,17 @@ app.use(
 
 app.use(
   cors({
-    origin: ORIGIN,
-    methods: ["GET", "POST"],
-    credentials: false,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn("❌ Origine CORS non autorizzata:", origin);
+      return callback(new Error("CORS non autorizzato"));
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   })
 );
 
@@ -36,15 +143,11 @@ app.get("/api/health", (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // 🧠 Rotte Wizzy (chat, quiz, lezioni)
 app.use("/api/ai", aiRouter);
+app.use("/api/ai", lessonsRouter);
 
 // 🚀 Server in ascolto su rete locale
 const PORT = process.env.PORT || 5050;
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🪄 Wizzy backend running on http://192.168.1.14:${PORT}`);
-  console.log(`📘 Rotte disponibili:
-  - /api/ai/ask
-  - /api/ai/generate-quiz
-  - /api/ai/lezioni/:materia/:numero
-  - /api/health
-  `);
+  logRoutes();
 });

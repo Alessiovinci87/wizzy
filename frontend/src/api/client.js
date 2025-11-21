@@ -1,5 +1,10 @@
 // frontend/src/api/client.js
-export const API_URL = "http://192.168.1.14:5050"; // 👈 IP del tuo PC sulla rete locale
+const rawApiUrl =
+  process.env.EXPO_PUBLIC_API_URL ||
+  process.env.API_URL ||
+  "http://192.168.1.14:5050";
+
+export const API_URL = rawApiUrl.replace(/\/$/, "");
 
 // ⏱ funzione di timeout per evitare blocchi infiniti
 const fetchWithTimeout = (url, options, timeout = 8000) => {
@@ -54,4 +59,12 @@ export async function generateQuiz(topic = "Inglese", level = 1, numQuestions = 
     console.error("❌ Errore fetch generateQuiz:", err.message);
     return { quiz: [] };
   }
+}
+
+export async function fetchLesson(materia = "inglese", numero = 1, signal) {
+  const url = `${API_URL}/api/ai/lezioni/${materia}/${numero}`;
+
+  const res = await fetch(url, { method: "GET", signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
 }
